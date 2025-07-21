@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Union, Dict, Any, Optional
 from uuid import UUID
 
@@ -22,3 +22,9 @@ class Tenant(BaseModel):
     id: Union[int, None] = None
     name: str
     status: str
+
+class User(BaseModel):
+    tenant_id: UUID
+    email: EmailStr
+    full_name: str
+    role: str
