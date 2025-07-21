@@ -1,13 +1,14 @@
-from typing import Union, Dict, Any, Optional
-from datetime import datetime
+from typing import Union
 from uuid import UUID
 import time
 
 from fastapi import FastAPI, Response, status, HTTPException
-from pydantic import BaseModel
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import  Json
+
+import schemas
 
 app = FastAPI()
 
@@ -24,27 +25,7 @@ while True: # while condition
         print("Error: ", error)
         time.sleep(3)
 
-# Declare class using Python types
-class Log(BaseModel):
-    id: Union[int, None] = None
-    tenant_id: UUID
-    user_id: UUID
-    session_id: str
-    ip_address: str
-    user_agent: str
-    action_type: str
-    resource_type: str
-    resource_id: str
-    severity: str
-    before_state: Optional[Dict[str, Any]] = None
-    after_state: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-class Tenant(BaseModel):
-    id: Union[int, None] = None
-    name: str
-    status: str
-
+# API endpoints
 @app.get("/")
 def root():
     return {"Hello": "World"}
@@ -96,7 +77,7 @@ def search_tenant():
 # POST
 # Create log entry (with tenant-ID)
 @app.post("/logs/", status_code=status.HTTP_201_CREATED)
-def create_log(log: Log):
+def create_log(log: schemas.Log):
     sql = """
     INSERT INTO audit_logs 
     (tenant_id, user_id, session_id, ip_address, user_agent,
@@ -128,7 +109,7 @@ def create_bulk():
 
 # Create new tenant (admin only)
 @app.post("/tenants/", status_code=status.HTTP_201_CREATED)
-def create_tenant(tenant: Tenant):
+def create_tenant(tenant: schemas.Tenant):
     sql = """
     INSERT INTO tenants
     (name, status)
@@ -147,9 +128,31 @@ def create_tenant(tenant: Tenant):
 
 # PUT (not in scoped, WIP)
 @app.put("/logs/{id}", )
-def update_log(id: UUID, log: Log):
-    return {"Hello": "World"}
+def update_log(id: UUID, log: schemas.Log):
+    sql = """UPDATE audit_logs 
+    SET tenant_id = %s, user_id = %s, session_id = %s,
+    ip_address = %s, user_agent = %s, action_type = %s, 
+    resource_type = %s, resource_id = %s, severity = %s,
+    before_state = %s, after_state = %s, metadata = %s
+    WHERE id = %s RETURNING *;"""
 
+    params = (
+        log.tenant_id, log.user_id, log.session_id,
+        log.ip_address, log.user_agent, log.action_type,
+        log.resource_type, log.resource_id, log.severity,
+        Json(log.before_state), Json(log.after_state), Json(log.metadata),
+        id
+    )
+
+    curr.execute(sql, params)
+    updated_log = curr.fetchone()
+    # Commit statement
+    conn.commit()
+
+    if not updated_log:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
+
+    return updated_log
 
 # DELETE
 # delete old logs (tenant-scoped) - WIP
