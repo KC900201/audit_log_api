@@ -1,41 +1,49 @@
-from typing import Union, List
+from typing import Union, Dict, Any, Optional
 from datetime import datetime
+from uuid import UUID
+import time
 
 from fastapi import FastAPI, Response, status, HTTPException
 from pydantic import BaseModel
 
+import psycopg
+from psycopg.rows import dict_row
+
 app = FastAPI()
 
-# Declare body types using Python types
+# Connect to PostgreSQL database
+while True: # while condition
+    try:
+      #   Change later to remove hardcode connection (env variables)
+      conn = psycopg.connect(conninfo="host=localhost dbname=fastapi user=postgres password=password", row_factory=dict_row)
+      curr = conn.cursor()
+      print("Database connection was successful")
+      break
+    except Exception as error:
+        print("Connection to database failed")
+        print("Error: ", error)
+        time.sleep(3)
+
+# Declare class using Python types
 class Log(BaseModel):
     id: Union[int, None] = None
-    userId: int
-    text: str
-    level: str = "INFO"
-    timeStamp: datetime
+    tenant_id: UUID
+    user_id: UUID
+    session_id: str
+    ip_address: str
+    user_agent: str
+    action_type: str
+    resource_type: str
+    resource_id: str
+    severity: str
+    before_state: Optional[Dict[str, Any]] = None
+    after_state: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
-class ItemList(BaseModel):
-    items: List[Log]
-
-# Mock lists
-item_list = [
-    {"id": 1, "userId": 100100, "text": "Test string", "level": "ERROR", "timeStamp": datetime.now()},
-    {"id": 2, "userId": 100101, "text": "Hello World", "level": "WARNING", "timeStamp": datetime.now()},
-    {"id": 3, "userId": 100102, "name": "Hello KC", "level": "CRITICAL", "timeStamp": datetime.now()}
-]
-
-
-def find_log(id):
-    for item in item_list:
-        if item["id"] == id:
-            return item
-    return None
-
-def find_index_log(id):
-    for i, p in enumerate(item_list):
-        if p["id"] == id:
-            return i
-    return None
+class Tenant(BaseModel):
+    id: Union[int, None] = None
+    name: str
+    status: str
 
 @app.get("/")
 def root():
@@ -46,24 +54,25 @@ def root():
 #  Return all or filtered logs
 @app.get("/logs/")
 def search_log(q: Union[str, None] = None):
-    if not item_list:
-        return {"Error:" "Log list is empty"}
-
-    return {"list": item_list}
+    sql = "SELECT * FROM audit_logs ORDER BY id ASC;"
+    curr.execute(sql)
+    logs = curr.fetchall()
+    return {"data": logs}
 
 #  Return logs by id
 @app.get("/logs/{id}")
-def search_log_id(id: int, response: Response):
-    if not item_list:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log list is empty")
+def search_log_id(id: UUID, response: Response):
+    sql = "SELECT * FROM audit_logs where id = %s;"
+    param = [id]
 
-    item = find_log(id)
+    curr.execute(sql, param)
+    log = curr.fetchone()
 
-    if not item:
+    if not log:
         # trigger exception
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
 
-    return {"item": item}
+    return log
 
 # Export logs (tenant-scoped) **
 @app.get("/logs/export")
@@ -76,19 +85,41 @@ def get_stats():
     return {"Hello: World"}
 
 # List accessible tenant (admin only)
-@app.get("/tenants")
+@app.get("/tenants/")
 def search_tenant():
-    return {"Hello: World"}
+    sql = "SELECT * FROM tenants ORDER BY id ASC;"
+    curr.execute(sql)
+    tenants = curr.fetchall()
+
+    return {"data": tenants}
 
 # POST
 # Create log entry (with tenant-ID)
 @app.post("/logs/", status_code=status.HTTP_201_CREATED)
 def create_log(log: Log):
-    # mock create
-    item_dict = log.model_dump()
-    item_dict["id"] = len(item_list) + 1
-    item_list.append(item_dict)
-    return {"message": "Successfully created items"}
+    sql = """
+    INSERT INTO audit_logs 
+    (tenant_id, user_id, session_id, ip_address, user_agent,
+     action_type, resource_type, resource_id, severity,
+     before_state, after_state, metadata)
+    VALUES
+    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    RETURNING *;
+    """
+
+    params = (
+        log.tenant_id, log.user_id, log.session_id, log.ip_address, log.user_agent,
+        log.action_type, log.resource_type, log.resource_id, log.severity,
+        log.before_state, log.after_state, log.metadata
+    )
+
+    curr.execute(sql, params)
+    new_log = curr.fetchone()
+
+    # Commit the insert statement
+    conn.commit()
+
+    return new_log
 
 # Create entries in bulk (with tenant ID)
 @app.post("/logs/bulk", status_code=status.HTTP_201_CREATED)
@@ -96,47 +127,54 @@ def create_bulk():
     return {"Hello: World"}
 
 # Create new tenant (admin only)
-@app.post("/tenants")
-def create_tenant():
-    return {"Hello: World"}
+@app.post("/tenants/", status_code=status.HTTP_201_CREATED)
+def create_tenant(tenant: Tenant):
+    sql = """
+    INSERT INTO tenants
+    (name, status)
+    VALUES (%s, %s)
+    RETURNING *;
+    """
+    params = (tenant.name, tenant.status)
 
-# PUT
+    curr.execute(sql, params)
+    new_tenant = curr.fetchone()
+
+    # Commit statement
+    conn.commit()
+
+    return new_tenant
+
+# PUT (not in scoped, WIP)
 @app.put("/logs/{id}", )
-def update_log(id: int, log: Log):
-    if not item_list:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log list is empty")
+def update_log(id: UUID, log: Log):
+    return {"Hello": "World"}
 
-    index = find_index_log(id)
-
-    if index is None:
-        # trigger exception
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
-
-    log_dict = log.model_dump()
-    log_dict["id"] = id
-    item_list[index] = log_dict
-
-    return {"log": log_dict}
 
 # DELETE
-# delete old logs (tenant-scoped)
-@app.delete("logs/cleanup")
+# delete old logs (tenant-scoped) - WIP
+@app.delete("logs/cleanup", status_code=status.HTTP_204_NO_CONTENT)
 def delete_logs():
-    while len(item_list) > 0:
-        item_list.pop()
-
     return {"message": "All logs are deleted"}
 
+# Delete logs by id
 @app.delete("/logs/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_item(id: int):
-    item = find_log(id)
-    if item:
-        item_list.remove(item)
+def delete_log(id: UUID):
+    sql = "DELETE FROM audit_logs WHERE id = %s RETURNING *;"
+    param = [id]
+
+    curr.execute(sql, param)
+    deleted_log = curr.fetchone()
+
+    # Commit sql statement
+    conn.commit()
+
+    if deleted_log:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
 
-# WS
+# WIP
 # real-time log streaming **
 @app.websocket("/logs/stream")
 def log_stream():
