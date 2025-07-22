@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import Union
 from uuid import UUID
 
@@ -7,18 +8,64 @@ from psycopg.types.json import  Json
 from db import curr, conn
 import schemas
 
-router = APIRouter()
+router = APIRouter(prefix="/logs")
 # GET endpoints
 #  Return all or filtered logs
-@router.get("/logs/")
+@router.get("/")
 def search_log(q: Union[str, None] = None):
     sql = "SELECT * FROM audit_logs ORDER BY id ASC;"
     curr.execute(sql)
     logs = curr.fetchall()
     return {"data": logs}
 
+# Return log statistics (tenant-scoped) **
+@router.get("/stats")
+def get_stats():
+    # 1. Total count
+    curr.execute("SELECT COUNT(*) as total from audit_logs;")
+    total = curr.fetchone()["total"]
+    # 2. Counts by action_type
+    curr.execute("""
+        SELECT action_type, COUNT(*) AS count
+        FROM audit_logs
+        GROUP BY action_type
+        ORDER BY count DESC
+    """)
+    by_action = curr.fetchall()
+    # 3. Counts by severity
+    curr.execute("""
+        SELECT severity, COUNT(*) as count
+        FROM audit_logs
+        GROUP BY severity
+        ORDER BY count DESC
+    """)
+    by_severity = curr.fetchall()
+    # 4. Logs per day for the last 7 days
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    curr.execute("""
+        SELECT DATE_TRUNC('day', created_at) AS day,
+        COUNT(*) AS count
+        FROM audit_logs
+        WHERE created_at >= %s
+        GROUP BY day
+        ORDER BY day;
+    """, (seven_days_ago,))
+    per_day = curr.fetchall()
+
+    return {
+        "total_logs": total,
+        "by_action": by_action,
+        "by_severity": by_severity,
+        "last_7_days": per_day
+    }
+
+# Export logs (tenant-scoped) **
+@router.get("/export")
+def export_log():
+    return {"Hello: World"}
+
 #  Return logs by id
-@router.get("/logs/{id}")
+@router.get("/{id}")
 def search_log_id(id: UUID, response: Response):
     sql = "SELECT * FROM audit_logs where id = %s;"
     param = [id]
@@ -32,19 +79,9 @@ def search_log_id(id: UUID, response: Response):
 
     return log
 
-# Export logs (tenant-scoped) **
-@router.get("/logs/export")
-def export_log():
-    return {"Hello: World"}
-
-# Return log statistics (tenant-scoped) **
-@router.get("/logs/stats")
-def get_stats():
-    return {"Hello: World"}
-
 # POST endpoints
 # Create log entry (with tenant-ID)
-@router.post("/logs/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_log(log: schemas.Log):
     sql = """
     INSERT INTO audit_logs 
@@ -71,18 +108,18 @@ def create_log(log: schemas.Log):
     return new_log
 
 # Create entries in bulk (with tenant ID)
-@router.post("/logs/bulk", status_code=status.HTTP_201_CREATED)
+@router.post("/bulk", status_code=status.HTTP_201_CREATED)
 def create_bulk():
     return {"Hello: World"}
 
 # DELETE
 # delete old logs (tenant-scoped) - WIP
-@router.delete("logs/cleanup", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/cleanup", status_code=status.HTTP_204_NO_CONTENT)
 def delete_logs():
     return {"message": "All logs are deleted"}
 
 # Delete logs by id
-@router.delete("/logs/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_log(id: UUID):
     sql = "DELETE FROM audit_logs WHERE id = %s RETURNING *;"
     param = [id]
@@ -99,7 +136,7 @@ def delete_log(id: UUID):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
 
 # PUT (not in scoped, WIP)
-@router.put("/logs/{id}", )
+@router.put("/{id}", )
 def update_log(id: UUID, log: schemas.Log):
     sql = """UPDATE audit_logs 
     SET tenant_id = %s, user_id = %s, session_id = %s,
@@ -128,7 +165,7 @@ def update_log(id: UUID, log: schemas.Log):
 
 # WEBSOCKET
 # real-time log streaming **
-@router.websocket("/logs/stream")
+@router.websocket("/stream")
 def log_stream():
     # What should it return?
     return {"Hello: World"}

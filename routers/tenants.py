@@ -3,11 +3,11 @@ from fastapi import APIRouter, status, HTTPException, Response
 from db import curr, conn
 import schemas
 
-router = APIRouter()
+router = APIRouter(prefix="/tenants")
 
 # GET
 # List accessible tenant (admin only)
-@router.get("/tenants/")
+@router.get("/")
 def search_tenant():
     sql = "SELECT * FROM tenants ORDER BY id ASC;"
     curr.execute(sql)
@@ -15,10 +15,9 @@ def search_tenant():
 
     return {"data": tenants}
 
-
 # POST
 # Create new tenant (admin only)
-@router.post("/tenants/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_tenant(tenant: schemas.Tenant):
     sql = """
     INSERT INTO tenants
