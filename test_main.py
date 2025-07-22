@@ -1,4 +1,5 @@
 import uuid
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -117,3 +118,9 @@ def test_create_tenant():
     # Assert id and created_at is generated
     assert "id" in created
     assert "created_at" in created
+
+def test_websocket_log_stream():
+    tenant_id = uuid4()
+    with client.websocket_connect(f"/api/v1/logs/stream?tenant_id={tenant_id}") as ws:
+        # Simulate ping to keep connection alive
+        ws.send_text("ping")

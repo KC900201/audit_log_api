@@ -310,3 +310,12 @@ async def log_stream(websocket: WebSocket, tenant_id: UUID):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(tenant_id, websocket)
+
+@router.post("/mock-broadcast")
+async def mock_broadcast(tenant_id: UUID, msg: str):
+    """
+    To test websocket broadcast test by creating a mock endpoint
+    :return: None
+    """
+    await manager.broadcast(tenant_id, message={"message": str})
+    return {"status": "sent"}

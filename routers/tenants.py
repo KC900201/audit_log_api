@@ -1,3 +1,4 @@
+from typing import Union
 from fastapi import APIRouter, status, HTTPException, Response
 
 from db import curr, conn
@@ -8,9 +9,25 @@ router = APIRouter(prefix="/tenants")
 # GET
 # List accessible tenant (admin only)
 @router.get("/")
-def search_tenant():
-    sql = "SELECT * FROM tenants ORDER BY id ASC;"
-    curr.execute(sql)
+def search_tenant(name: Union[str, None] = None, status: Union[str, None] = None):
+    conditions = []
+    params = []
+
+    if name:
+        conditions.append("name = %s")
+        params.append(name)
+
+    if status:
+        conditions.append("status = %s")
+        params.append(status)
+
+    base_sql = "SELECT * FROM tenants"
+
+    if conditions:
+        base_sql += " WHERE " + " AND ".join(conditions)
+    base_sql += " ORDER BY created_at DESC;"
+
+    curr.execute(base_sql, params)
     tenants = curr.fetchall()
 
     return {"data": tenants}
