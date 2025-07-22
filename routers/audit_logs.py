@@ -42,9 +42,51 @@ manager = ConnectionManager()
 # GET endpoints
 #  Return all or filtered logs
 @router.get("/")
-def search_log(q: Union[str, None] = None):
-    sql = "SELECT * FROM audit_logs ORDER BY id ASC;"
-    curr.execute(sql)
+def search_log(
+        tenant_id: Union[UUID, None] = None,
+        user_id: Union[UUID, None] = None,
+        session_id: Union[str, None] = None,
+        action_type: Union[str, None] = None,
+        resource_type: Union[str, None] = None,
+        severity: Union[str, None] = None,
+        q: Union[str, None] = None):
+    conditions = []
+    params = []
+
+    if tenant_id:
+        conditions.append("tenant_id = %s")
+        params.append(tenant_id)
+
+    if user_id:
+        conditions.append("user_id = %s")
+        params.append(user_id)
+
+    if session_id:
+        conditions.append("session_id = %s")
+        params.append(session_id)
+
+    if action_type:
+        conditions.append("action_type = %s")
+        params.append(action_type)
+
+    if severity:
+        conditions.append("severity = %s")
+        params.append(severity)
+
+    if resource_type:
+        conditions.append("resource_type = %s")
+        params.append(resource_type)
+
+    if q:
+        # Example fuzzy search in resource_id and metadata
+        conditions.append("(CAST(resource_id AS TEXT) ILIKE %s OR CAST(metadata AS TEXT) ILIKE %s)")
+        params.extend([f"%{q}%", f"%{q}%"])
+
+    base_sql = "SELECT * FROM audit_logs"
+    if conditions:
+        base_sql += " WHERE " + " AND ".join(conditions)
+    base_sql += " ORDER BY created_at ASC;"
+    curr.execute(base_sql, params)
     logs = curr.fetchall()
     return {"data": logs}
 
