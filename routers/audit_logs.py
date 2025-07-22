@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Union, List
 from uuid import UUID
+import io, csv
 
 from fastapi import APIRouter, status, HTTPException, Response
 from psycopg.types.json import  Json
+from starlette.responses import StreamingResponse
 
 from db import curr, conn
 import schemas
@@ -62,7 +64,34 @@ def get_stats():
 # Export logs (tenant-scoped) **
 @router.get("/export")
 def export_log():
-    return {"Hello: World"}
+    sql = "SELECT * FROM audit_logs ORDER BY created_at DESC;"
+    curr.execute(sql)
+    rows = curr.fetchall()
+
+    # Generate CSV stream chunks
+    def iter_csv():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+
+        # Write header
+        if rows:
+            writer.writerow(rows[0].keys())
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+        # Write each row
+        for row in rows:
+            writer.writerow(row.values())
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    # return as StreamingResponse for downloading
+    return StreamingResponse(
+        iter_csv(),
+        media_type="text/csv",
+        headers={}
+    )
 
 #  Return logs by id
 @router.get("/{id}")
@@ -96,7 +125,9 @@ def create_log(log: schemas.Log):
     params = (
         log.tenant_id, log.user_id, log.session_id, log.ip_address, log.user_agent,
         log.action_type, log.resource_type, log.resource_id, log.severity,
-        log.before_state, log.after_state, log.metadata
+        Json(log.before_state) if log.before_state is not None else None,
+        Json(log.after_state) if log.after_state is not None else None,
+        Json(log.metadata) if log.metadata is not None else None,
     )
 
     curr.execute(sql, params)
@@ -109,14 +140,47 @@ def create_log(log: schemas.Log):
 
 # Create entries in bulk (with tenant ID)
 @router.post("/bulk", status_code=status.HTTP_201_CREATED)
-def create_bulk():
-    return {"Hello: World"}
+def create_bulk(logs: List[schemas.Log]):
+    if not logs:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is empty")
+
+    sql = """
+    INSERT INTO audit_logs 
+    (tenant_id, user_id, session_id, ip_address, user_agent,
+     action_type, resource_type, resource_id, severity,
+     before_state, after_state, metadata)
+    VALUES
+    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    RETURNING *;
+    """
+    params = []
+    for log in logs:
+        params.append((
+            log.tenant_id, log.user_id, log.session_id, log.ip_address, log.user_agent,
+            log.action_type, log.resource_type, log.resource_id, log.severity,
+            Json(log.before_state) if log.before_state is not None else None,
+            Json(log.after_state)  if log.after_state  is not None else None,
+            Json(log.metadata)     if log.metadata     is not None else None,
+        ))
+
+    # Execute many
+    curr.executemany(sql, params)
+    conn.commit()
+
+    return {"Data inserted": len(params)}
+
 
 # DELETE
 # delete old logs (tenant-scoped) - WIP
 @router.delete("/cleanup", status_code=status.HTTP_204_NO_CONTENT)
 def delete_logs():
-    return {"message": "All logs are deleted"}
+    sql = "DELETE FROM audit_logs RETURNING *;"
+    curr.execute(sql)
+
+    # Commit sql statement
+    conn.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # Delete logs by id
 @router.delete("/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT)
