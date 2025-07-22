@@ -6,11 +6,39 @@ import io, csv
 from fastapi import APIRouter, status, HTTPException, Response
 from psycopg.types.json import  Json
 from starlette.responses import StreamingResponse
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from db import curr, conn
 import schemas
 
 router = APIRouter(prefix="/logs")
+
+# Set up connection manager for broadcasting
+class ConnectionManager:
+    def __init__(self):
+        self.active: dict[UUID, list[WebSocket]] = {}
+
+    async def connect(self, tenant_id: UUID, ws: WebSocket):
+        await ws.accept()
+        self.active.setdefault(tenant_id, []).append(ws)
+
+    def disconnect(self, tenant_id: UUID, ws: WebSocket):
+        conns = self.active.get(tenant_id, [])
+        if ws in conns:
+            conns.remove(ws)
+            if not conns:
+                del self.active[tenant_id]
+
+    async def broadcast(self, tenant_id: UUID, message: dict):
+        """
+        Send message to clients
+        :return: None
+        """
+        for ws in self.active.get(tenant_id, []):
+            await ws.send_json(message)
+
+manager = ConnectionManager()
+
 # GET endpoints
 #  Return all or filtered logs
 @router.get("/")
@@ -230,6 +258,13 @@ def update_log(id: UUID, log: schemas.Log):
 # WEBSOCKET
 # real-time log streaming **
 @router.websocket("/stream")
-def log_stream():
-    # What should it return?
-    return {"Hello: World"}
+async def log_stream(websocket: WebSocket, tenant_id: UUID):
+    # Establish connection
+    await manager.connect(tenant_id, websocket)
+
+    try:
+        # Keep connection alive until client disconnects
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(tenant_id, websocket)
