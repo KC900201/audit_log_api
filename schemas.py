@@ -21,7 +21,7 @@ class Log(BaseModel):
     created_at: Optional[datetime] = None
 
 class Tenant(BaseModel):
-    id: Union[int, None] = None
+    id: Union[UUID, None] = None
     name: str
     status: str
     created_at: Optional[datetime] = None
