@@ -2,14 +2,16 @@ from datetime import datetime, timedelta
 from typing import Union, List
 from uuid import UUID
 import io, csv
+import json
 
 from fastapi import APIRouter, status, HTTPException, Response, Depends
+from fastapi.encoders import jsonable_encoder
 from psycopg.types.json import  Json
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from db import curr, conn
-from auth import verity_jwt
+from auth import verify_jwt
 from utils import send_log_to_sqs
 import schemas
 
@@ -51,7 +53,7 @@ def search_log(
         resource_type: Union[str, None] = None,
         severity: Union[str, None] = None,
         q: Union[str, None] = None,
-        user = Depends(verity_jwt)
+        user = Depends(verify_jwt)
     ):
 
     tenant_id = UUID(user["tenant_id"])
@@ -97,7 +99,7 @@ def search_log(
 
 # Return log statistics (tenant-scoped) **
 @router.get("/stats")
-def get_stats(user = Depends(verity_jwt)):
+def get_stats(user = Depends(verify_jwt)):
     tenant_id = UUID(user["tenant_id"])
     total_count_sql = "SELECT COUNT(*) as total from audit_logs WHERE tenant_id = %s;"
     total_action_type_sql = """
@@ -109,8 +111,8 @@ def get_stats(user = Depends(verity_jwt)):
     """
     total_severity_count_sql = """
         SELECT severity, COUNT(*) as count
-        WHERE tenant_id = %s
         FROM audit_logs
+        WHERE tenant_id = %s
         GROUP BY severity
         ORDER BY count DESC
     """
@@ -146,7 +148,7 @@ def get_stats(user = Depends(verity_jwt)):
 
 # Export logs (tenant-scoped) **
 @router.get("/export")
-def export_log(user = Depends(verity_jwt)):
+def export_log(user = Depends(verify_jwt)):
     tenant_id = UUID(user["tenant_id"])
     sql = "SELECT * FROM audit_logs WHERE tenant_id = %s ORDER BY created_at DESC;"
     curr.execute(sql, (tenant_id,))
@@ -194,8 +196,8 @@ def search_log_id(id: UUID):
 
 # POST endpoints
 # Create log entry (with tenant-ID)
-@router.post("/", status_code=status.HTTP_201_CREATED)
-def create_log(log: schemas.Log, token: dict = Depends(verity_jwt)):
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Log)
+def create_log(log: schemas.Log, token: dict = Depends(verify_jwt)):
     tenant_id = token.get("tenant_id")
     if tenant_id != str(log.tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
@@ -225,23 +227,23 @@ def create_log(log: schemas.Log, token: dict = Depends(verity_jwt)):
     conn.commit()
 
     # Send to SQS
-    send_log_to_sqs({
-        **log.model_dump(),
-        "tenant_id": str(tenant_id)
-    })
+    # send_log_to_sqs(jsonable_encoder({
+    #     **log.model_dump(),
+    #     "tenant_id": str(tenant_id)
+    # }))
 
-    return new_log
+    return jsonable_encoder(new_log)
 
 # Create entries in bulk (with tenant ID)
 @router.post("/bulk", status_code=status.HTTP_201_CREATED)
-def create_bulk(logs: List[schemas.Log], token: dict = Depends(verity_jwt)):
+def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
+    if not logs:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is empty")
+
     # verify tenant_id
     tenant_id = token.get("tenant_id")
     if tenant_id != str(logs[0].tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
-
-    if not logs:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is empty")
 
     sql = """
     INSERT INTO audit_logs 
@@ -267,11 +269,11 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verity_jwt)):
     conn.commit()
 
     # Send to SQS
-    for log in logs:
-        send_log_to_sqs({
-            **log.model_dump(),
-            "tenant_id": str(log.tenant_id)
-        })
+    # for log in logs:
+    #     send_log_to_sqs(jsonable_encoder({
+    #         **log.model_dump(),
+    #         "tenant_id": str(log.tenant_id)
+    #     }))
 
     return {"Data inserted": len(params)}
 

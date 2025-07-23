@@ -12,7 +12,7 @@ ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 security = HTTPBearer()
 
-def verity_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         return payload # include "tenant_id", "role", "sub" etc.
