@@ -19,6 +19,16 @@ def verity_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
     except jwt.PyJWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid JWT token")
 
+def generate_mock_jwt():
+    payload = {
+        "sub": "user123",
+        "tenant_id": "f248d1ee-f3c7-458a-9c17-27cef4b89e38",
+        "role": "admin"
+    }
+
+    token = jwt.encode(payload, SECRET_KEY, ALGORITHM)
+    return token
+
 # WIP
 def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     return {}

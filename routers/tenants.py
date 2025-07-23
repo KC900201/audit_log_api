@@ -1,15 +1,24 @@
+from http.client import HTTPException
 from typing import Union
-from fastapi import APIRouter, status, HTTPException, Response
+from fastapi import APIRouter, status as http_status, Depends, HTTPException
 
+from auth import verity_jwt
 from db import curr, conn
 import schemas
+from utils import send_log_to_sqs
 
 router = APIRouter(prefix="/tenants")
 
 # GET
 # List accessible tenant (admin only)
 @router.get("/")
-def search_tenant(name: Union[str, None] = None, status: Union[str, None] = None):
+def search_tenant(name: Union[str, None] = None,
+                  status: Union[str, None] = None,
+                  user=Depends(verity_jwt())
+                  ):
+    if user["role"] != "admin":
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
     conditions = []
     params = []
 
@@ -34,8 +43,11 @@ def search_tenant(name: Union[str, None] = None, status: Union[str, None] = None
 
 # POST
 # Create new tenant (admin only)
-@router.post("/", status_code=status.HTTP_201_CREATED)
-def create_tenant(tenant: schemas.Tenant):
+@router.post("/", status_code=http_status.HTTP_201_CREATED)
+def create_tenant(tenant: schemas.Tenant, user=Depends(verity_jwt())):
+    if user["role"] != "admin":
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
     sql = """
     INSERT INTO tenants
     (name, status)
@@ -49,5 +61,11 @@ def create_tenant(tenant: schemas.Tenant):
 
     # Commit statement
     conn.commit()
+
+    # Send to SQS
+    send_log_to_sqs({
+        **tenant.model_dump(),
+        "tenant_id": str(user["tenant_id"])
+    })
 
     return new_tenant

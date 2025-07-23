@@ -3,12 +3,14 @@ from typing import Union, List
 from uuid import UUID
 import io, csv
 
-from fastapi import APIRouter, status, HTTPException, Response
+from fastapi import APIRouter, status, HTTPException, Response, Depends
 from psycopg.types.json import  Json
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from db import curr, conn
+from auth import verity_jwt
+from utils import send_log_to_sqs
 import schemas
 
 router = APIRouter(prefix="/logs")
@@ -43,19 +45,22 @@ manager = ConnectionManager()
 #  Return all or filtered logs
 @router.get("/")
 def search_log(
-        tenant_id: Union[UUID, None] = None,
         user_id: Union[UUID, None] = None,
         session_id: Union[str, None] = None,
         action_type: Union[str, None] = None,
         resource_type: Union[str, None] = None,
         severity: Union[str, None] = None,
-        q: Union[str, None] = None):
-    conditions = []
-    params = []
+        q: Union[str, None] = None,
+        user = Depends(verity_jwt())
+    ):
 
-    if tenant_id:
-        conditions.append("tenant_id = %s")
-        params.append(tenant_id)
+    tenant_id = UUID(user["tenant_id"])
+    conditions = []
+    params: list = [tenant_id]
+
+    # if tenant_id:
+    #     conditions.append("tenant_id = %s")
+    #     params.append(tenant_id)
 
     if user_id:
         conditions.append("user_id = %s")
@@ -82,9 +87,9 @@ def search_log(
         conditions.append("(CAST(resource_id AS TEXT) ILIKE %s OR CAST(metadata AS TEXT) ILIKE %s)")
         params.extend([f"%{q}%", f"%{q}%"])
 
-    base_sql = "SELECT * FROM audit_logs"
+    base_sql = "SELECT * FROM audit_logs WHERE tenant_id = %s"
     if conditions:
-        base_sql += " WHERE " + " AND ".join(conditions)
+        base_sql += " AND ".join(conditions)
     base_sql += " ORDER BY created_at ASC;"
     curr.execute(base_sql, params)
     logs = curr.fetchall()
@@ -92,36 +97,44 @@ def search_log(
 
 # Return log statistics (tenant-scoped) **
 @router.get("/stats")
-def get_stats():
-    # 1. Total count
-    curr.execute("SELECT COUNT(*) as total from audit_logs;")
-    total = curr.fetchone()["total"]
-    # 2. Counts by action_type
-    curr.execute("""
+def get_stats(user = Depends(verity_jwt())):
+    tenant_id = UUID(user["tenant_id"])
+    total_count_sql = "SELECT COUNT(*) as total from audit_logs WHERE tenant_id = %s;"
+    total_action_type_sql = """
         SELECT action_type, COUNT(*) AS count
         FROM audit_logs
+        WHERE tenant_id = %s
         GROUP BY action_type
         ORDER BY count DESC
-    """)
-    by_action = curr.fetchall()
-    # 3. Counts by severity
-    curr.execute("""
+    """
+    total_severity_count_sql = """
         SELECT severity, COUNT(*) as count
+        WHERE tenant_id = %s
         FROM audit_logs
         GROUP BY severity
         ORDER BY count DESC
-    """)
-    by_severity = curr.fetchall()
-    # 4. Logs per day for the last 7 days
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    curr.execute("""
+    """
+    total_logs_for_last_week_sql = """
         SELECT DATE_TRUNC('day', created_at) AS day,
         COUNT(*) AS count
         FROM audit_logs
-        WHERE created_at >= %s
+        WHERE created_at >= %s AND tenant_id = %s
         GROUP BY day
         ORDER BY day;
-    """, (seven_days_ago,))
+    """
+
+    # 1. Total count
+    curr.execute(total_count_sql, (tenant_id,))
+    total = curr.fetchone()["total"]
+    # 2. Counts by action_type
+    curr.execute(total_action_type_sql, (tenant_id,))
+    by_action = curr.fetchall()
+    # 3. Counts by severity
+    curr.execute(total_severity_count_sql, (tenant_id,))
+    by_severity = curr.fetchall()
+    # 4. Logs per day for the last 7 days
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    curr.execute(total_logs_for_last_week_sql, (seven_days_ago,tenant_id,))
     per_day = curr.fetchall()
 
     return {
@@ -133,9 +146,10 @@ def get_stats():
 
 # Export logs (tenant-scoped) **
 @router.get("/export")
-def export_log():
-    sql = "SELECT * FROM audit_logs ORDER BY created_at DESC;"
-    curr.execute(sql)
+def export_log(user = Depends(verity_jwt())):
+    tenant_id = UUID(user["tenant_id"])
+    sql = "SELECT * FROM audit_logs WHERE tenant_id = %s ORDER BY created_at DESC;"
+    curr.execute(sql, (tenant_id,))
     rows = curr.fetchall()
 
     # Generate CSV stream chunks
@@ -165,7 +179,7 @@ def export_log():
 
 #  Return logs by id
 @router.get("/{id}")
-def search_log_id(id: UUID, response: Response):
+def search_log_id(id: UUID):
     sql = "SELECT * FROM audit_logs where id = %s;"
     param = [id]
 
@@ -181,7 +195,11 @@ def search_log_id(id: UUID, response: Response):
 # POST endpoints
 # Create log entry (with tenant-ID)
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_log(log: schemas.Log):
+def create_log(log: schemas.Log, token: dict = Depends(verity_jwt())):
+    tenant_id = token.get("tenant_id")
+    if tenant_id != str(log.tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
+
     sql = """
     INSERT INTO audit_logs 
     (tenant_id, user_id, session_id, ip_address, user_agent,
@@ -206,11 +224,22 @@ def create_log(log: schemas.Log):
     # Commit the insert statement
     conn.commit()
 
+    # Send to SQS
+    send_log_to_sqs({
+        **log.model_dump(),
+        "tenant_id": str(tenant_id)
+    })
+
     return new_log
 
 # Create entries in bulk (with tenant ID)
 @router.post("/bulk", status_code=status.HTTP_201_CREATED)
-def create_bulk(logs: List[schemas.Log]):
+def create_bulk(logs: List[schemas.Log], token: dict = Depends(verity_jwt())):
+    # verify tenant_id
+    # tenant_id = token.get("tenant_id")
+    # if tenant_id != str(logs[0].tenant_id):
+    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
+
     if not logs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is empty")
 
@@ -237,8 +266,14 @@ def create_bulk(logs: List[schemas.Log]):
     curr.executemany(sql, params)
     conn.commit()
 
-    return {"Data inserted": len(params)}
+    # Send to SQS
+    for log in logs:
+        send_log_to_sqs({
+            **log.model_dump(),
+            "tenant_id": str(log.tenant_id)
+        })
 
+    return {"Data inserted": len(params)}
 
 # DELETE
 # delete old logs (tenant-scoped) - WIP
