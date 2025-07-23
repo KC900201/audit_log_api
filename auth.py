@@ -1,5 +1,5 @@
 # To execute authentication
-from dns.dnssecalgs import algorithms
+from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
 from uuid import UUID
@@ -23,7 +23,8 @@ def generate_mock_jwt():
     payload = {
         "sub": "user123",
         "tenant_id": "f248d1ee-f3c7-458a-9c17-27cef4b89e38",
-        "role": "admin"
+        "role": "admin",
+        "exp": datetime.utcnow() + timedelta(hours=1)
     }
 
     token = jwt.encode(payload, SECRET_KEY, ALGORITHM)

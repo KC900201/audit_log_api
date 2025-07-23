@@ -51,7 +51,7 @@ def search_log(
         resource_type: Union[str, None] = None,
         severity: Union[str, None] = None,
         q: Union[str, None] = None,
-        user = Depends(verity_jwt())
+        user = Depends(verity_jwt)
     ):
 
     tenant_id = UUID(user["tenant_id"])
@@ -97,7 +97,7 @@ def search_log(
 
 # Return log statistics (tenant-scoped) **
 @router.get("/stats")
-def get_stats(user = Depends(verity_jwt())):
+def get_stats(user = Depends(verity_jwt)):
     tenant_id = UUID(user["tenant_id"])
     total_count_sql = "SELECT COUNT(*) as total from audit_logs WHERE tenant_id = %s;"
     total_action_type_sql = """
@@ -146,7 +146,7 @@ def get_stats(user = Depends(verity_jwt())):
 
 # Export logs (tenant-scoped) **
 @router.get("/export")
-def export_log(user = Depends(verity_jwt())):
+def export_log(user = Depends(verity_jwt)):
     tenant_id = UUID(user["tenant_id"])
     sql = "SELECT * FROM audit_logs WHERE tenant_id = %s ORDER BY created_at DESC;"
     curr.execute(sql, (tenant_id,))
@@ -195,7 +195,7 @@ def search_log_id(id: UUID):
 # POST endpoints
 # Create log entry (with tenant-ID)
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_log(log: schemas.Log, token: dict = Depends(verity_jwt())):
+def create_log(log: schemas.Log, token: dict = Depends(verity_jwt)):
     tenant_id = token.get("tenant_id")
     if tenant_id != str(log.tenant_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
@@ -234,11 +234,11 @@ def create_log(log: schemas.Log, token: dict = Depends(verity_jwt())):
 
 # Create entries in bulk (with tenant ID)
 @router.post("/bulk", status_code=status.HTTP_201_CREATED)
-def create_bulk(logs: List[schemas.Log], token: dict = Depends(verity_jwt())):
+def create_bulk(logs: List[schemas.Log], token: dict = Depends(verity_jwt)):
     # verify tenant_id
-    # tenant_id = token.get("tenant_id")
-    # if tenant_id != str(logs[0].tenant_id):
-    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
+    tenant_id = token.get("tenant_id")
+    if tenant_id != str(logs[0].tenant_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant ID mismatch")
 
     if not logs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is empty")
