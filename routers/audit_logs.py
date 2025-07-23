@@ -227,10 +227,10 @@ def create_log(log: schemas.Log, token: dict = Depends(verify_jwt)):
     conn.commit()
 
     # Send to SQS
-    # send_log_to_sqs(jsonable_encoder({
-    #     **log.model_dump(),
-    #     "tenant_id": str(tenant_id)
-    # }))
+    send_log_to_sqs(jsonable_encoder({
+        **log.model_dump(),
+        "tenant_id": str(tenant_id)
+    }))
 
     return jsonable_encoder(new_log)
 
@@ -269,11 +269,11 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
     conn.commit()
 
     # Send to SQS
-    # for log in logs:
-    #     send_log_to_sqs(jsonable_encoder({
-    #         **log.model_dump(),
-    #         "tenant_id": str(log.tenant_id)
-    #     }))
+    for log in logs:
+        send_log_to_sqs(jsonable_encoder({
+            **log.model_dump(),
+            "tenant_id": str(log.tenant_id)
+        }))
 
     return {"Data inserted": len(params)}
 

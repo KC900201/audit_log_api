@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from auth import generate_mock_jwt
 from main import app
@@ -80,18 +81,23 @@ def test_tenant_id_mismatch_when_creating_log():
     resp = client.post("/api/v1/logs/", json=SAMPLE_LOG, headers=headers)
     assert resp.status_code == 403, resp.text # http status 403 for unauthorized access
 
-def test_create_new_log():
+@patch("routers.audit_logs.send_log_to_sqs")
+def test_create_new_log(mock_send_log_to_sqs):
     # Create a new log
     resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
     assert resp.status_code == 201, resp.text
     created = resp.json()
 
+    # Assert send_log_to_sqs was called
+    mock_send_log_to_sqs.assert_called_once()
+
     # Assert that the new log has a auto-generated id and created_at date
     assert "id" in created
     assert "created_at" in created
 
+@patch("routers.audit_logs.send_log_to_sqs")
 @pytest.mark.parametrize("size", [0, 2])
-def test_create_bulk(size):
+def test_create_bulk(mock_send_log_to_sqs, size):
     """
     :param size: 0, 2
     :return: none
@@ -110,6 +116,7 @@ def test_create_bulk(size):
         body = resp.json()
         assert "Data inserted" in body
         assert body["Data inserted"] == size
+        assert mock_send_log_to_sqs.call_count == len(payload)
 
 def test_websocket_log_stream():
     tenant_id = uuid4()
