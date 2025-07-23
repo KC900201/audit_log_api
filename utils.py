@@ -8,7 +8,7 @@ QUEUE_URL = "https://sqs.ap-northeast-1.amazon.aws.com/YOUR-ACCOUNT-ID/audit-log
 def send_log_to_sqs(log_data: dict):
     try:
         sqs.send_message(
-            QueeuUrl=QUEUE_URL,
+            QueueUrl=QUEUE_URL,
             MessageBody=json.dumps(log_data)
         )
     except ClientError as e:
