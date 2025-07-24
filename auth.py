@@ -40,19 +40,3 @@ def generate_mock_user_jwt():
 
     token = jwt.encode(payload, SECRET_KEY, ALGORITHM)
     return token
-
-# WIP
-def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    return {}
-
-def get_current_tenant(user=Depends(get_current_user())) -> UUID:
-    """
-    TODO: validate JWT / session, extract and return tenant_id
-    :param user: user
-    :return: tenant_id
-    """
-    raise NotImplementedError("Authentication not implemented")
-    # return user["tenant_id"]
-
-def require_admin(user=Depends(get_current_user())):
-    return user

@@ -9,7 +9,7 @@ from psycopg.types.json import  Json
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from db import curr, conn
+from db import curr, commit
 from auth import verify_jwt
 from utils import send_log_to_sqs, index_log_to_opensearch
 import schemas
@@ -150,6 +150,7 @@ def get_stats(user = Depends(verify_jwt)):
 def export_log(user = Depends(verify_jwt)):
     tenant_id = UUID(user["tenant_id"])
     sql = "SELECT * FROM audit_logs WHERE tenant_id = %s ORDER BY created_at DESC;"
+
     curr.execute(sql, (tenant_id,))
     rows = curr.fetchall()
 
@@ -223,7 +224,7 @@ def create_log(log: schemas.Log, token: dict = Depends(verify_jwt)):
     new_log = curr.fetchone()
 
     # Commit the insert statement
-    conn.commit()
+    commit()
 
     # Send to SQS
     send_log_to_sqs(jsonable_encoder({
@@ -268,7 +269,7 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
 
     # Execute many
     curr.executemany(sql, params)
-    conn.commit()
+    commit()
 
     for log in logs:
         # send to SQS
@@ -286,10 +287,10 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
 @router.delete("/cleanup", status_code=status.HTTP_204_NO_CONTENT)
 def delete_logs():
     sql = "DELETE FROM audit_logs RETURNING *;"
-    curr.execute(sql)
 
+    curr.execute(sql)
     # Commit sql statement
-    conn.commit()
+    commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -303,7 +304,7 @@ def delete_log(id: UUID):
     deleted_log = curr.fetchone()
 
     # Commit sql statement
-    conn.commit()
+    commit()
 
     if deleted_log:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -313,12 +314,15 @@ def delete_log(id: UUID):
 # PUT (not in scoped, WIP)
 @router.put("/{id}", )
 def update_log(id: UUID, log: schemas.Log):
-    sql = """UPDATE audit_logs 
+
+    sql = """
+    UPDATE audit_logs 
     SET tenant_id = %s, user_id = %s, session_id = %s,
     ip_address = %s, user_agent = %s, action_type = %s, 
     resource_type = %s, resource_id = %s, severity = %s,
     before_state = %s, after_state = %s, metadata = %s
-    WHERE id = %s RETURNING *;"""
+    WHERE id = %s RETURNING *;
+    """
 
     params = (
         log.tenant_id, log.user_id, log.session_id,
@@ -331,7 +335,7 @@ def update_log(id: UUID, log: schemas.Log):
     curr.execute(sql, params)
     updated_log = curr.fetchone()
     # Commit statement
-    conn.commit()
+    commit()
 
     if not updated_log:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")

@@ -32,8 +32,9 @@ def test_search_tenant_fail_unauthorized():
     resp = client.get("/api/v1/tenants/", headers=headers_user)
     assert resp.status_code == 403, resp.text
 
+@patch("routers.audit_logs.index_log_to_opensearch")
 @patch("routers.tenants.send_log_to_sqs")
-def test_search_tenant_after_create(mock_send_log_to_sqs):
+def test_search_tenant_after_create(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     # Create a new record
     resp = client.post("/api/v1/tenants/", json=SAMPLE_TENANT, headers=headers)
     assert resp.status_code == 201, resp.text
@@ -42,6 +43,7 @@ def test_search_tenant_after_create(mock_send_log_to_sqs):
 
     # Assert send_log_to_sqs was called
     mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
 
     # Search for newly created log
     resp2 = client.get("/api/v1/tenants/", headers=headers)

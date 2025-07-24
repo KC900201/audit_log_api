@@ -3,7 +3,7 @@ from typing import Union
 from fastapi import APIRouter, status as http_status, Depends, HTTPException
 
 from auth import verify_jwt
-from db import curr, conn
+from db import curr, commit
 import schemas
 from utils import send_log_to_sqs, index_log_to_opensearch
 
@@ -60,7 +60,7 @@ def create_tenant(tenant: schemas.Tenant, user=Depends(verify_jwt)):
     new_tenant = curr.fetchone()
 
     # Commit statement
-    conn.commit()
+    commit()
 
     # Send to SQS
     send_log_to_sqs({

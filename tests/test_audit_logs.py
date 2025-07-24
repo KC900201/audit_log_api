@@ -25,6 +25,8 @@ SAMPLE_LOG = {
     "metadata": {"test_meta": True}
 }
 
+test_tenant_id = "f248d1ee-f3c7-458a-9c17-27cef4b89e38"
+
 JWT_LOG = {
     "tenant_id": "f248d1ee-f3c7-458a-9c17-27cef4b89e38", # same tenant_id with jwt token
     "user_id": str(uuid.uuid4()),
@@ -91,15 +93,20 @@ def test_tenant_id_mismatch_when_creating_log():
     resp = client.post("/api/v1/logs/", json=SAMPLE_LOG, headers=headers)
     assert resp.status_code == 403, resp.text # http status 403 for unauthorized access
 
+@patch("routers.audit_logs.index_log_to_opensearch")
 @patch("routers.audit_logs.send_log_to_sqs")
-def test_create_new_log(mock_send_log_to_sqs):
+def test_create_new_log(mock_send_log_to_sqs, mock_index_log_to_opensearch):
+    test_log = SAMPLE_LOG.copy()
+    test_log["tenant_id"] = test_tenant_id
+
     # Create a new log
     resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
     assert resp.status_code == 201, resp.text
     created = resp.json()
 
-    # Assert send_log_to_sqs was called
+    # Assert AWS SQS and OpenSearch function are called
     mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
 
     # Assert that the new log has a auto-generated id and created_at date
     assert "id" in created
