@@ -54,29 +54,33 @@ def test_search_log_empty():
     assert "data" in body
     assert isinstance(body["data"], list)
 
+@patch("routers.audit_logs.index_log_to_opensearch")
 @patch("routers.audit_logs.send_log_to_sqs")
-def test_search_log_after_create(mock_send_log_to_sqs):
+def test_search_log_after_create(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     # Create a new record
     resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
     assert resp.status_code == 201, resp.text
     created = resp.json()
     log_id = created["id"]
-    # Assert send_log_to_sqs was called
+    # Assert send_log_to_sqs were called
     mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
 
     # Search for newly created log
     resp2 = client.get("/api/v1/logs/", headers=headers)
     data = resp2.json()["data"]
     assert (item["id"] == log_id for item in data)
 
+@patch("routers.audit_logs.index_log_to_opensearch")
 @patch("routers.audit_logs.send_log_to_sqs")
-def test_get_log_stats(mock_send_log_to_sqs):
+def test_get_log_stats(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     # Create a new log
     resp1 = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
     assert resp1.status_code == 201, resp1.text
     created = resp1.json()
-    # Assert send_log_to_sqs was called
+    # Assert utility functions were called
     mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
 
     # Retrieve the log stats after the created log
     resp2 = client.get("/api/v1/logs/stats", headers=headers)

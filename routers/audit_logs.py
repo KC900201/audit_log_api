@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from typing import Union, List
 from uuid import UUID
 import io, csv
-import json
 
 from fastapi import APIRouter, status, HTTPException, Response, Depends
 from fastapi.encoders import jsonable_encoder
@@ -12,7 +11,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from db import curr, conn
 from auth import verify_jwt
-from utils import send_log_to_sqs
+from utils import send_log_to_sqs, index_log_to_opensearch
 import schemas
 
 router = APIRouter(prefix="/logs")
@@ -232,6 +231,9 @@ def create_log(log: schemas.Log, token: dict = Depends(verify_jwt)):
         "tenant_id": str(tenant_id)
     }))
 
+    # Call OpenSearch
+    index_log_to_opensearch(log=log.model_dump(), index="audit-logs")
+
     return jsonable_encoder(new_log)
 
 # Create entries in bulk (with tenant ID)
@@ -268,12 +270,14 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
     curr.executemany(sql, params)
     conn.commit()
 
-    # Send to SQS
     for log in logs:
+        # send to SQS
         send_log_to_sqs(jsonable_encoder({
             **log.model_dump(),
             "tenant_id": str(log.tenant_id)
         }))
+        # call OpenSearch
+        index_log_to_opensearch(log=log.model_dump(), index="audit-logs")
 
     return {"Data inserted": len(params)}
 

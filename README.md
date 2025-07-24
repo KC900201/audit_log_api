@@ -145,17 +145,21 @@ sequenceDiagram
 
 ## Project Structure
 ```
-├── .aws/               # Amazon AWS credentials (access key, secret access key)
-├── routers/            # Sub-routine files
-│   ├── audit_logs.py   # API endpoints for audit_logs class 
-│   └── tenants.py      # API endpoints for tenants class
-├── venv/               # Virtual environment setup
-├── .gitignore          # Git ignore rules
-├── auth.py             # Authentication configuration
-├── db.py               # Database connection
-├── schemas.py          # Class declaration
-├── test_main.py        # Test suite
-└── README.md           # Project documentation
+├── .aws/                   # Amazon AWS credentials (access key, secret access key)
+├── routers/                # Sub-routine files
+│   ├── audit_logs.py       # API endpoints for audit_logs class 
+│   └── tenants.py          # API endpoints for tenants class
+├── tests/                  # Test scripts
+│   ├── test_audit_logs.py
+│   ├── test_main.py
+│   └── test_tenants.py
+├── venv/                   # Virtual environment setup
+├── .gitignore              # Git ignore rules
+├── auth.py                 # Authentication configuration
+├── db.py                   # Database connection
+├── schemas.py              # Class declaration
+├── utils.py                # Utility functions
+└── README.md               # Project documentation
 ```
 
 ## Local Development Setup (WIP)
@@ -181,3 +185,4 @@ uvicorn main:app --reload
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Postman Documentation](https://www.postman.com/product/what-is-postman/)
+- [PyJWT](https://pyjwt.readthedocs.io/en/stable/index.html)

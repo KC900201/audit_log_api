@@ -5,7 +5,7 @@ from fastapi import APIRouter, status as http_status, Depends, HTTPException
 from auth import verify_jwt
 from db import curr, conn
 import schemas
-from utils import send_log_to_sqs
+from utils import send_log_to_sqs, index_log_to_opensearch
 
 router = APIRouter(prefix="/tenants")
 
@@ -67,5 +67,7 @@ def create_tenant(tenant: schemas.Tenant, user=Depends(verify_jwt)):
         **tenant.model_dump(),
         "tenant_id": str(user["tenant_id"])
     })
+
+    index_log_to_opensearch(log=tenant.model_dump(), index="tenants")
 
     return new_tenant

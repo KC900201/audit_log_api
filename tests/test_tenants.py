@@ -48,14 +48,16 @@ def test_search_tenant_after_create(mock_send_log_to_sqs):
     data = resp2.json()["data"]
     assert (item["id"] == tenant_id for item in data)
 
+@patch("routers.tenants.index_log_to_opensearch")
 @patch("routers.tenants.send_log_to_sqs")
-def test_create_tenant(mock_send_log_to_sqs):
+def test_create_tenant(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     resp = client.post("/api/v1/tenants/", json=SAMPLE_TENANT, headers=headers)
     assert resp.status_code == 201, resp.text
     created = resp.json()
 
     # Assert send_log_to_sqs was called
     mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
 
     # Assert id and created_at is generated
     assert "id" in created
