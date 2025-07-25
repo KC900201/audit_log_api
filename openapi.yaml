@@ -1,0 +1,489 @@
+openapi: 3.1.0
+info:
+  title: FastAPI
+  version: 0.1.0
+paths:
+  /api/v1/logs/:
+    get:
+      tags:
+        - Audit Logs
+      summary: Search Log
+      operationId: search_log_api_v1_logs__get
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                format: uuid
+              - type: 'null'
+            title: User Id
+        - name: session_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Session Id
+        - name: action_type
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Action Type
+        - name: resource_type
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Resource Type
+        - name: severity
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Severity
+        - name: q
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Q
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+        - Audit Logs
+      summary: Create Log
+      operationId: create_log_api_v1_logs__post
+      security:
+        - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Log'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Log'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/logs/stats:
+    get:
+      tags:
+        - Audit Logs
+      summary: Get Stats
+      operationId: get_stats_api_v1_logs_stats_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+        - HTTPBearer: []
+  /api/v1/logs/export:
+    get:
+      tags:
+        - Audit Logs
+      summary: Export Log
+      operationId: export_log_api_v1_logs_export_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+        - HTTPBearer: []
+  '/api/v1/logs/{id}':
+    get:
+      tags:
+        - Audit Logs
+      summary: Search Log Id
+      operationId: search_log_id_api_v1_logs__id__get
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+        - Audit Logs
+      summary: Update Log
+      operationId: update_log_api_v1_logs__id__put
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Log'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/logs/bulk:
+    post:
+      tags:
+        - Audit Logs
+      summary: Create Bulk
+      operationId: create_bulk_api_v1_logs_bulk_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: '#/components/schemas/Log'
+              type: array
+              title: Logs
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+        - HTTPBearer: []
+  /api/v1/logs/cleanup:
+    delete:
+      tags:
+        - Audit Logs
+      summary: Delete Logs
+      operationId: delete_logs_api_v1_logs_cleanup_delete
+      responses:
+        '204':
+          description: Successful Response
+  '/api/v1/logs/cleanup/{id}':
+    delete:
+      tags:
+        - Audit Logs
+      summary: Delete Log
+      operationId: delete_log_api_v1_logs_cleanup__id__delete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            title: Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/logs/mock-broadcast:
+    post:
+      tags:
+        - Audit Logs
+      summary: Mock Broadcast
+      description: |-
+        To test websocket broadcast test by creating a mock endpoint
+        :return: None
+      operationId: mock_broadcast_api_v1_logs_mock_broadcast_post
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+            title: Tenant Id
+        - name: msg
+          in: query
+          required: true
+          schema:
+            type: string
+            title: Msg
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tenants/:
+    get:
+      tags:
+        - Tenants
+      summary: Search Tenant
+      operationId: search_tenant_api_v1_tenants__get
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: name
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Name
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+        - Tenants
+      summary: Create Tenant
+      operationId: create_tenant_api_v1_tenants__post
+      security:
+        - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tenant'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /:
+    get:
+      summary: Root
+      operationId: root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Log:
+      properties:
+        id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+          title: Id
+        tenant_id:
+          type: string
+          format: uuid
+          title: Tenant Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        session_id:
+          type: string
+          title: Session Id
+        ip_address:
+          type: string
+          title: Ip Address
+        user_agent:
+          type: string
+          title: User Agent
+        action_type:
+          type: string
+          title: Action Type
+        resource_type:
+          type: string
+          title: Resource Type
+        resource_id:
+          type: string
+          title: Resource Id
+        severity:
+          type: string
+          title: Severity
+        before_state:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Before State
+        after_state:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: After State
+        metadata:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Metadata
+        created_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+          title: Created At
+      type: object
+      required:
+        - tenant_id
+        - user_id
+        - session_id
+        - ip_address
+        - user_agent
+        - action_type
+        - resource_type
+        - resource_id
+        - severity
+      title: Log
+    Tenant:
+      properties:
+        id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+          title: Id
+        name:
+          type: string
+          title: Name
+        status:
+          type: string
+          title: Status
+        created_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+          title: Created At
+      type: object
+      required:
+        - name
+        - status
+      title: Tenant
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+        - loc
+        - msg
+        - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
