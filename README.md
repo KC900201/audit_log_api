@@ -125,7 +125,67 @@ To import:
 └── README.md               # Project documentation
 ```
 
-## Local Development Setup (WIP)
+## Database setup (Local environment)
+
+Ensure you have PostgreSQL is installed in your local environment. To install PostgreSQL, refer to the official [download link](https://www.postgresql.org/download/)
+
+### Enable Required Extensions
+Connect to the database and enable the required extensions for the schema
+```sql
+-- Enable UUID generation (required for primary keys)
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- (Optional) Enable TimescaleDB if installed
+CREATE EXTENSION IF NOT EXISTS "timescaledb";
+```
+
+### Apply Schema
+You can use [pgAdmin GUI](https://www.pgadmin.org/) to create the tables based on the SQL below, or create the schema using the Postgre terminal in your console.
+```sql
+-- tenants table
+CREATE TABLE public.tenants (
+    id UUID DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    CONSTRAINT chk_status CHECK (status IN ('active', 'inactive', 'suspended'))
+);
+
+ALTER TABLE IF EXISTS public.tenants
+    OWNER to postgres;
+
+--- audit_logs table
+CREATE TABLE public.audit_logs
+(
+    id uuid DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    user_id uuid,
+    session_id text,
+    ip_address inet,
+    user_agent text,
+    action_type text NOT NULL,
+    resource_type text NOT NULL,
+    resource_id text NOT NULL,
+    severity text NOT NULL,
+    before_state jsonb,
+    after_state jsonb,
+    metadata jsonb,
+    created_at timestamp with time zone DEFAULT current_timestamp,
+    PRIMARY KEY (id),
+    CONSTRAINT chk_action_type CHECK (action_type IN ('CREATE', 'UPDATE', 'DELETE', 'VIEW')),
+    CONSTRAINT chk_severity CHECK (severity in ('INFO', 'WARNING', 'ERROR', 'CRITICAL'))
+);
+
+ALTER TABLE IF EXISTS public.audit_logs
+    OWNER to postgres;
+    
+CREATE INDEX idx_audit_tenant ON public.audit_logs (tenant_id);
+CREATE INDEX idx_audit_resource ON public.audit_logs (resource_type, resource_id);
+CREATE INDEX idx_audit_created_at ON public.audit_logs ((metadata->>'timestamp'));
+```
+
+## Local Development Setup 
 
 ### Install dependencies
 ```bash
