@@ -1,4 +1,4 @@
-# middlware.py
+# middleware.py
 
 import time
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
