@@ -25,9 +25,3 @@ class Tenant(BaseModel):
     name: str
     status: str
     created_at: Optional[datetime] = None
-
-class User(BaseModel):
-    tenant_id: UUID
-    email: EmailStr
-    full_name: str
-    role: str
