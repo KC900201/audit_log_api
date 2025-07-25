@@ -135,8 +135,27 @@ def test_create_bulk(mock_send_log_to_sqs, size):
         assert body["Data inserted"] == size
         assert mock_send_log_to_sqs.call_count == len(payload)
 
+@patch("routers.audit_logs.index_log_to_opensearch")
+@patch("routers.audit_logs.send_log_to_sqs")
+def test_delete_log_after_create(mock_send_log_to_sqs, mock_index_log_to_opensearch):
+    # Create a new record
+    resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
+    assert resp.status_code == 201, resp.text
+    created = resp.json()
+    log_id = created["id"]
+    # Assert send_log_to_sqs were called
+    mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
+
+    # Delete logs
+    resp2 = client.delete("/api/v1/logs/cleanup", headers=headers)
+    assert resp2.status_code == 204
+
 def test_websocket_log_stream():
-    tenant_id = uuid4()
-    with client.websocket_connect(f"/api/v1/logs/stream?tenant_id={tenant_id}") as ws:
-        # Simulate ping to keep connection alive
-        ws.send_text("ping")
+    try:
+        with client.websocket_connect(f"/api/v1/logs/stream?tenant_id={test_tenant_id}", timeout=5) as ws:
+            # Simulate ping to keep connection alive
+            ws.send_text("ping")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        assert False, f"Websocket timeout or connection error: {e}"

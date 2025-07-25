@@ -97,7 +97,7 @@ graph TB
 ## Postman Collection 
 
 You can use the Postman collection below to explore and test the API:
-- Download [Postman collection](postman/postman_collection.json)
+- Download [Postman collection](collections/audit_log_api.postman_collection.json)
 
 To import:
 1. Open Postman
@@ -200,6 +200,15 @@ pip install
 ### Run local development server
 ```bash
 uvicorn main:app --reload
+```
+### Run coverage test
+```bash
+# Run pytest on audit log and tenant routes
+# Includes coverage report, showing missing lines in terminal output
+pytest tests/test_audit_logs.py tests/test_tenants.py --cov=routers.audit_logs --cov=routers.tenants --cov-report=term-missing
+
+# Run coverage test and generate HTML file
+pytest tests/test_audit_logs.py tests/test_tenants.py --cov=routers.audit_logs --cov=routers.tenants --cov-report=html
 ```
 
 ## Learn More

@@ -37,8 +37,13 @@ class ConnectionManager:
         Send message to clients
         :return: None
         """
-        for ws in self.active.get(tenant_id, []):
-            await ws.send_json(message)
+        conns = self.active.get(tenant_id, [])
+        for ws in conns:
+            try:
+                await ws.send_json(message)
+            except Exception as e:
+                print(f"Exception: {e}")
+                pass
 
 manager = ConnectionManager()
 
@@ -285,10 +290,13 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
 # DELETE
 # delete old logs (tenant-scoped) - WIP
 @router.delete("/cleanup", status_code=status.HTTP_204_NO_CONTENT)
-def delete_logs():
-    sql = "DELETE FROM audit_logs RETURNING *;"
+def delete_logs(token: dict = Depends(verify_jwt)):
+    tenant_id = token.get("tenant_id")
 
-    curr.execute(sql)
+    sql = "DELETE FROM audit_logs WHERE tenant_id = %s RETURNING *;"
+    param = (tenant_id,)
+
+    curr.execute(sql, param)
     # Commit sql statement
     commit()
 
@@ -296,9 +304,10 @@ def delete_logs():
 
 # Delete logs by id
 @router.delete("/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_log(id: UUID):
-    sql = "DELETE FROM audit_logs WHERE id = %s RETURNING *;"
-    param = [id]
+def delete_log(id: UUID, token: dict = Depends(verify_jwt)):
+    tenant_id = token.get("tenant_id")
+    sql = "DELETE FROM audit_logs WHERE tenant_id = %s AND id = %s RETURNING *;"
+    param = [tenant_id, id]
 
     curr.execute(sql, param)
     deleted_log = curr.fetchone()
@@ -310,37 +319,6 @@ def delete_log(id: UUID):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
-
-# PUT (not in scoped, WIP)
-@router.put("/{id}", )
-def update_log(id: UUID, log: schemas.Log):
-
-    sql = """
-    UPDATE audit_logs 
-    SET tenant_id = %s, user_id = %s, session_id = %s,
-    ip_address = %s, user_agent = %s, action_type = %s, 
-    resource_type = %s, resource_id = %s, severity = %s,
-    before_state = %s, after_state = %s, metadata = %s
-    WHERE id = %s RETURNING *;
-    """
-
-    params = (
-        log.tenant_id, log.user_id, log.session_id,
-        log.ip_address, log.user_agent, log.action_type,
-        log.resource_type, log.resource_id, log.severity,
-        Json(log.before_state), Json(log.after_state), Json(log.metadata),
-        id
-    )
-
-    curr.execute(sql, params)
-    updated_log = curr.fetchone()
-    # Commit statement
-    commit()
-
-    if not updated_log:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Log with id {id} does not exist")
-
-    return updated_log
 
 # WEBSOCKET
 # real-time log streaming **
