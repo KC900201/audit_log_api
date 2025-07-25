@@ -49,7 +49,7 @@ manager = ConnectionManager()
 
 # GET endpoints
 #  Return all or filtered logs
-@router.get("/")
+@router.get("/", summary="Search audit logs (filtered, tenant scoped)")
 def search_log(
         user_id: Union[UUID, None] = None,
         session_id: Union[str, None] = None,
@@ -63,10 +63,6 @@ def search_log(
     tenant_id = UUID(user["tenant_id"])
     conditions = []
     params: list = [tenant_id]
-
-    # if tenant_id:
-    #     conditions.append("tenant_id = %s")
-    #     params.append(tenant_id)
 
     if user_id:
         conditions.append("user_id = %s")
@@ -102,7 +98,7 @@ def search_log(
     return {"data": logs}
 
 # Return log statistics (tenant-scoped) **
-@router.get("/stats")
+@router.get("/stats", summary="Get audit logs statistics (tenant-scoped)")
 def get_stats(user = Depends(verify_jwt)):
     tenant_id = UUID(user["tenant_id"])
     total_count_sql = "SELECT COUNT(*) as total from audit_logs WHERE tenant_id = %s;"
@@ -151,7 +147,7 @@ def get_stats(user = Depends(verify_jwt)):
     }
 
 # Export logs (tenant-scoped) **
-@router.get("/export")
+@router.get("/export", summary="Export logs to CSV format file (tenant-scoped)")
 def export_log(user = Depends(verify_jwt)):
     tenant_id = UUID(user["tenant_id"])
     sql = "SELECT * FROM audit_logs WHERE tenant_id = %s ORDER BY created_at DESC;"
@@ -185,10 +181,12 @@ def export_log(user = Depends(verify_jwt)):
     )
 
 #  Return logs by id
-@router.get("/{id}")
-def search_log_id(id: UUID):
-    sql = "SELECT * FROM audit_logs where id = %s;"
-    param = [id]
+@router.get("/{id}", summary="Search log by id (tenant-scoped)")
+def search_log_id(id: UUID, user: Depends(verify_jwt())):
+    tenant_id = UUID(user["tenant_id"])
+
+    sql = "SELECT * FROM audit_logs where id = %s AND tenant_id = %s;"
+    param = [id, tenant_id]
 
     curr.execute(sql, param)
     log = curr.fetchone()
@@ -201,7 +199,8 @@ def search_log_id(id: UUID):
 
 # POST endpoints
 # Create log entry (with tenant-ID)
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Log)
+@router.post("/", status_code=status.HTTP_201_CREATED,
+             response_model=schemas.Log, summary="Create new log entry (tenant-scoped)")
 def create_log(log: schemas.Log, token: dict = Depends(verify_jwt)):
     tenant_id = token.get("tenant_id")
     if tenant_id != str(log.tenant_id):
@@ -243,7 +242,7 @@ def create_log(log: schemas.Log, token: dict = Depends(verify_jwt)):
     return jsonable_encoder(new_log)
 
 # Create entries in bulk (with tenant ID)
-@router.post("/bulk", status_code=status.HTTP_201_CREATED)
+@router.post("/bulk", status_code=status.HTTP_201_CREATED, summary="Create log entries in bulk (tenant-scoped)")
 def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
     if not logs:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is empty")
@@ -289,7 +288,7 @@ def create_bulk(logs: List[schemas.Log], token: dict = Depends(verify_jwt)):
 
 # DELETE
 # delete old logs (tenant-scoped) - WIP
-@router.delete("/cleanup", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/cleanup", status_code=status.HTTP_204_NO_CONTENT, summary="Delete log entry (tenant-scoped)")
 def delete_logs(token: dict = Depends(verify_jwt)):
     tenant_id = token.get("tenant_id")
 
@@ -303,7 +302,7 @@ def delete_logs(token: dict = Depends(verify_jwt)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # Delete logs by id
-@router.delete("/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/cleanup/{id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete log entry by id (tenant-scoped)")
 def delete_log(id: UUID, token: dict = Depends(verify_jwt)):
     tenant_id = token.get("tenant_id")
     sql = "DELETE FROM audit_logs WHERE tenant_id = %s AND id = %s RETURNING *;"
@@ -322,7 +321,7 @@ def delete_log(id: UUID, token: dict = Depends(verify_jwt)):
 
 # WEBSOCKET
 # real-time log streaming **
-@router.websocket("/stream")
+@router.websocket("/stream", name="Real time log streaming")
 async def log_stream(websocket: WebSocket, tenant_id: UUID):
     # Establish connection
     await manager.connect(tenant_id, websocket)

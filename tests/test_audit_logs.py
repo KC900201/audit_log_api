@@ -112,6 +112,27 @@ def test_create_new_log(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     assert "id" in created
     assert "created_at" in created
 
+@patch("routers.audit_logs.index_log_to_opensearch")
+@patch("routers.audit_logs.send_log_to_sqs")
+def test_search_log_by_id_success(mock_send_log_to_sqs, mock_index_log_to_opensearch):
+    test_log = SAMPLE_LOG.copy()
+    test_log["tenant_id"] = test_tenant_id
+
+    # Create a new log
+    resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
+    assert resp.status_code == 201, resp.text
+    log_id = resp.json()["id"]
+
+    # Search log by id
+    resp2 = client.get(f"/api/v1/logs/{log_id}", headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.json()["id"] == log_id
+
+def test_get_log_by_id_not_found():
+    random_id = str(uuid4())
+    resp = client.get(f"/api/v1/logs/{random_id}", headers=headers)
+    assert resp.status_code == 404
+
 @patch("routers.audit_logs.send_log_to_sqs")
 @pytest.mark.parametrize("size", [0, 2])
 def test_create_bulk(mock_send_log_to_sqs, size):
@@ -137,6 +158,27 @@ def test_create_bulk(mock_send_log_to_sqs, size):
 
 @patch("routers.audit_logs.index_log_to_opensearch")
 @patch("routers.audit_logs.send_log_to_sqs")
+def test_export_logs_to_csv(mock_send_log_to_sqs, mock_index_log_to_opensearch):
+    # Create new log
+    test_log = SAMPLE_LOG.copy()
+    test_log["tenant_id"] = test_tenant_id
+
+    # Create a new log
+    resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
+    assert resp.status_code == 201, resp.text
+
+    # Assert AWS SQS and OpenSearch function are called
+    mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
+
+    # Test export new log
+    resp2 = client.get("/api/v1/logs/export", headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.headers["content-type"] == "text/csv; charset=utf-8" # charset is auto append by FastAPI
+    assert "resource_id" in resp.text
+
+@patch("routers.audit_logs.index_log_to_opensearch")
+@patch("routers.audit_logs.send_log_to_sqs")
 def test_delete_log_after_create(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     # Create a new record
     resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
@@ -150,6 +192,26 @@ def test_delete_log_after_create(mock_send_log_to_sqs, mock_index_log_to_opensea
     # Delete logs
     resp2 = client.delete("/api/v1/logs/cleanup", headers=headers)
     assert resp2.status_code == 204
+
+@patch("routers.audit_logs.send_log_to_sqs")
+@patch("routers.audit_logs.index_log_to_opensearch")
+def test_delete_log_by_id(mock_send_log_to_sqs, mock_index_log_to_opensearch):
+    # Create log
+    resp = client.post("/api/v1/logs/", json=JWT_LOG, headers=headers)
+    log_id = resp.json()["id"]
+
+    # Assert send_log_to_sqs were called
+    mock_send_log_to_sqs.assert_called_once()
+    mock_index_log_to_opensearch.assert_called_once()
+
+    # Delete by id
+    resp2 = client.delete(f"/api/v1/logs/cleanup/{log_id}", headers=headers)
+    assert resp2.status_code == 204
+
+def test_delete_log_by_id_not_found():
+    random_id = str(uuid4())
+    resp = client.delete(f"/api/v1/logs/cleanup/{random_id}", headers=headers)
+    assert resp.status_code == 404
 
 def test_websocket_log_stream():
     try:

@@ -11,7 +11,7 @@ router = APIRouter(prefix="/tenants")
 
 # GET
 # List accessible tenant (admin only)
-@router.get("/")
+@router.get("/", summary="List tenants (admin only)")
 def search_tenant(name: Union[str, None] = None,
                   status: Union[str, None] = None,
                   user=Depends(verify_jwt)
@@ -43,7 +43,7 @@ def search_tenant(name: Union[str, None] = None,
 
 # POST
 # Create new tenant (admin only)
-@router.post("/", status_code=http_status.HTTP_201_CREATED, response_model=schemas.Tenant)
+@router.post("/", status_code=http_status.HTTP_201_CREATED, response_model=schemas.Tenant, summary="Create a new tenant (admin only)")
 def create_tenant(tenant: schemas.Tenant, user=Depends(verify_jwt)):
     if user["role"] != "admin":
         raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Admin access required")
