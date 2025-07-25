@@ -175,7 +175,7 @@ def test_export_logs_to_csv(mock_send_log_to_sqs, mock_index_log_to_opensearch):
     resp2 = client.get("/api/v1/logs/export", headers=headers)
     assert resp2.status_code == 200
     assert resp2.headers["content-type"] == "text/csv; charset=utf-8" # charset is auto append by FastAPI
-    assert "resource_id" in resp.text
+    assert "resource_id" in resp2.text
 
 @patch("routers.audit_logs.index_log_to_opensearch")
 @patch("routers.audit_logs.send_log_to_sqs")
