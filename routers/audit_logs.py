@@ -182,7 +182,7 @@ def export_log(user = Depends(verify_jwt)):
 
 #  Return logs by id
 @router.get("/{id}", summary="Search log by id (tenant-scoped)")
-def search_log_id(id: UUID, user: Depends(verify_jwt())):
+def search_log_id(id: UUID, user = Depends(verify_jwt)):
     tenant_id = UUID(user["tenant_id"])
 
     sql = "SELECT * FROM audit_logs where id = %s AND tenant_id = %s;"
