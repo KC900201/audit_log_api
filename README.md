@@ -39,7 +39,7 @@ POST   /api/v1/tenants                # Create new tenant (admin only)
 
 ## Architecture Diagram
 
-### System Architecture (WIP)
+### System Architecture 
 ```mermaid
 graph TB
     subgraph "Client Applications"
