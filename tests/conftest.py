@@ -1,5 +1,4 @@
 import pytest
-import os
 from db import conn
 
 @pytest.fixture(scope="function", autouse=True)
